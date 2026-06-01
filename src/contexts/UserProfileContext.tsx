@@ -102,8 +102,6 @@ export const UserProfileProvider: React.FC<UserProfileProviderProps> = ({ childr
             .from('profiles')
             .insert([{
               id: user.id,
-              full_name: basicProfile.name,
-              email: basicProfile.email,
               bio: basicProfile.bio,
               location: basicProfile.location,
               avatar_url: basicProfile.avatar_url,
@@ -120,21 +118,21 @@ export const UserProfileProvider: React.FC<UserProfileProviderProps> = ({ childr
         // Transform profile data to match UserProfile interface
         const userProfile: UserProfile = {
           id: profileWithSkills.id,
-          name: profileWithSkills.full_name || profileWithSkills.username || user.email?.split('@')[0] || 'User',
-          email: profileWithSkills.email || user.email || '',
+          name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+          email: user.email || '',
           bio: profileWithSkills.bio || '',
           location: profileWithSkills.location || '',
           // joinDate is the auth account creation time; profile.created_at
           // exists in the canonical init.sql schema, profile.updated_at in the
           // older deployed schema — fall through both so either works.
-          joinDate: user.created_at || profileWithSkills.created_at || profileWithSkills.updated_at || new Date().toISOString(),
+          joinDate: user.created_at || profileWithSkills.updated_at || new Date().toISOString(),
           avatar_url: profileWithSkills.avatar_url,
           cover_url: profileWithSkills.cover_url || null,
           skills: profileWithSkills.skills || [],
           endorsements: profileWithSkills.endorsements ?? 0,
           // Two schemas: init.sql uses `exchanges`, live DB uses
           // `total_swaps`/`swaps_count`. Read whichever exists.
-          exchanges: profileWithSkills.exchanges ?? profileWithSkills.total_swaps ?? profileWithSkills.swaps_count ?? 0,
+          exchanges: profileWithSkills.exchanges ?? profileWithSkills.total_swaps ?? 0,
           // Same for trust score: init.sql uses `trust_score` (0-100), live
           // DB uses `rating` (0-5). Both are fine to display verbatim.
           trustScore: profileWithSkills.trust_score ?? profileWithSkills.rating ?? 0,
