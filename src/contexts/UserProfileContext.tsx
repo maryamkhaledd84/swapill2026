@@ -61,9 +61,23 @@ export const UserProfileProvider: React.FC<UserProfileProviderProps> = ({ childr
       
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('*, skills!skills_user_id_fkey(*)')
+        .select('*')
         .eq('id', user.id)
         .single();
+
+      // Fetch skills separately since no foreign key relationship exists
+      let skills = [];
+      if (profile?.id) {
+        const { data: skillsData, error: skillsError } = await supabase
+          .from('skills')
+          .select('*')
+          .eq('user_id', profile.id);
+        if (!skillsError) {
+          skills = skillsData || [];
+        }
+      }
+
+      const profileWithSkills = profile ? { ...profile, skills } : null;
 
       if (error) {
         console.error('Error fetching profile:', error);
@@ -82,7 +96,7 @@ export const UserProfileProvider: React.FC<UserProfileProviderProps> = ({ childr
             exchanges: 0,
             trustScore: 0
           };
-          
+
           // Create profile in database (column names match live schema)
           const { error: insertError } = await supabase
             .from('profiles')
@@ -102,31 +116,31 @@ export const UserProfileProvider: React.FC<UserProfileProviderProps> = ({ childr
             setCurrentUser(basicProfile);
           }
         }
-      } else {
+      } else if (profileWithSkills) {
         // Transform profile data to match UserProfile interface
         const userProfile: UserProfile = {
-          id: profile.id,
-          name: profile.full_name || profile.username || user.email?.split('@')[0] || 'User',
-          email: profile.email || user.email || '',
-          bio: profile.bio || '',
-          location: profile.location || '',
+          id: profileWithSkills.id,
+          name: profileWithSkills.full_name || profileWithSkills.username || user.email?.split('@')[0] || 'User',
+          email: profileWithSkills.email || user.email || '',
+          bio: profileWithSkills.bio || '',
+          location: profileWithSkills.location || '',
           // joinDate is the auth account creation time; profile.created_at
           // exists in the canonical init.sql schema, profile.updated_at in the
           // older deployed schema — fall through both so either works.
-          joinDate: user.created_at || profile.created_at || profile.updated_at || new Date().toISOString(),
-          avatar_url: profile.avatar_url,
-          cover_url: profile.cover_url || null,
-          skills: profile.skills || [],
-          endorsements: profile.endorsements ?? 0,
+          joinDate: user.created_at || profileWithSkills.created_at || profileWithSkills.updated_at || new Date().toISOString(),
+          avatar_url: profileWithSkills.avatar_url,
+          cover_url: profileWithSkills.cover_url || null,
+          skills: profileWithSkills.skills || [],
+          endorsements: profileWithSkills.endorsements ?? 0,
           // Two schemas: init.sql uses `exchanges`, live DB uses
           // `total_swaps`/`swaps_count`. Read whichever exists.
-          exchanges: profile.exchanges ?? profile.total_swaps ?? profile.swaps_count ?? 0,
+          exchanges: profileWithSkills.exchanges ?? profileWithSkills.total_swaps ?? profileWithSkills.swaps_count ?? 0,
           // Same for trust score: init.sql uses `trust_score` (0-100), live
           // DB uses `rating` (0-5). Both are fine to display verbatim.
-          trustScore: profile.trust_score ?? profile.rating ?? 0,
-          updated_at: profile.updated_at
+          trustScore: profileWithSkills.trust_score ?? profileWithSkills.rating ?? 0,
+          updated_at: profileWithSkills.updated_at
         };
-        
+
         setCurrentUser(userProfile);
       }
     } catch (error) {

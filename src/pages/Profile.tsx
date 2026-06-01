@@ -282,9 +282,9 @@ export default function Profile() {
       
 
       try {
-        const { data: profileWithSkills, error: fetchError } = await supabase
+        const { data: profile, error: fetchError } = await supabase
           .from('profiles')
-          .select('*, skills!skills_user_id_fkey(*)')
+          .select('*')
           .eq('id', String(profileId))
           .maybeSingle();
 
@@ -299,11 +299,19 @@ export default function Profile() {
           return;
         }
 
-        if (!profileWithSkills) {
+        if (!profile) {
           setTargetProfile({ skills: [] });
           setTargetProfileLoading(false);
           return;
         }
+
+        // Fetch skills separately since no foreign key relationship exists
+        const { data: skillsData, error: skillsError } = await supabase
+          .from('skills')
+          .select('*')
+          .eq('user_id', profile.id);
+
+        const profileWithSkills = profile ? { ...profile, skills: skillsData || [] } : null;
 
         setTargetProfile(profileWithSkills);
       } catch (error) {
