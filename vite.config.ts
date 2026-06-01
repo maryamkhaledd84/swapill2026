@@ -13,16 +13,12 @@ export default defineConfig(({mode}) => {
     },
     server: {
       port: 3000,
-      host: '0.0.0.0',
+      strictPort: true,
       hmr: {
-        port: 3000,
-        host: 'localhost',
         protocol: 'ws',
-        clientPort: 3000
-      },
-      watch: {
-        usePolling: false,
-      },
+        host: 'localhost',
+        port: 3000
+      }
     },
     optimizeDeps: {
       include: ['react', 'react-dom'],
