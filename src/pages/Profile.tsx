@@ -2067,7 +2067,7 @@ export default function Profile() {
 
                  <div className="relative">
 
-                   <div className="w-[120px] h-[120px] md:w-[140px] md:h-[140px] rounded-full border-4 border-slate-950 shadow-2xl transition-all duration-300 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                   <div className="w-[120px] h-[120px] md:w-[140px] md:h-[140px] rounded-full border-4 border-slate-950 shadow-2xl transition-all duration-300 cursor-pointer pointer-events-auto" onClick={() => fileInputRef.current?.click()}>
 
                       {(() => {
 
