@@ -41,8 +41,7 @@ export default function SafeAvatar({
     setImgErrored(false);
   }, [src]);
 
-  const isDicebear = !!src && src.includes('dicebear.com');
-  const useImage = !!src && !isDicebear && !imgErrored;
+  const useImage = !!src && !imgErrored;
 
   const dimStyle = { width: size, height: size };
   const fontSize = Math.max(11, Math.round(size * 0.36));
