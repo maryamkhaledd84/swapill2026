@@ -11,7 +11,7 @@ export default defineConfig(({mode}) => {
         '@': path.resolve(__dirname, '.'),
       },
     },
-    server: {
+    server: mode === 'development' ? {
       port: 3000,
       strictPort: true,
       hmr: {
@@ -19,7 +19,7 @@ export default defineConfig(({mode}) => {
         host: 'localhost',
         port: 3000
       }
-    },
+    } : undefined,
     optimizeDeps: {
       include: ['react', 'react-dom'],
     },
