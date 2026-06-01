@@ -517,8 +517,8 @@ export default function Explore() {
           // Transform new profile to match expected format
           const transformedProfile = {
             id: newProfile.id,
-            name: (newProfile as any).full_name || 'Expert Member',
-            initials: (newProfile as any).full_name ? (newProfile as any).full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'EM',
+            name: (newProfile as any).full_name || 'Member',
+            initials: (newProfile as any).full_name ? (newProfile as any).full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'ME',
             avatar_url: newProfile.avatar_url || null,
             bio: newProfile.bio || 'No bio available',
             skills: newProfile.skills || [],
@@ -645,8 +645,8 @@ export default function Explore() {
 
         return {
           id: profile.id,
-          name: (profile as any).full_name || 'Expert Member',
-          initials: (profile as any).full_name ? (profile as any).full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'EM',
+          name: (profile as any).full_name || 'Member',
+          initials: (profile as any).full_name ? (profile as any).full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'ME',
           avatar_url: profile.avatar_url || null,
           bio: profile.bio || 'No bio available',
           skills: userSkills,
@@ -966,7 +966,7 @@ export default function Explore() {
                   <div className="flex items-start gap-4 mb-4">
                     <div className="relative inline-block">
                       <ModernAvatar
-                        name={user.name || 'Expert Member'}
+                        name={user.name || 'Member'}
                         size="medium"
                         avatarUrl={user.avatar_url}
                       />
@@ -982,7 +982,7 @@ export default function Explore() {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-lg font-semibold text-white mb-1">{user.name || 'Expert Member'}</h3>
+                        <h3 className="text-lg font-semibold text-white mb-1">{user.name || 'Member'}</h3>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1021,7 +1021,7 @@ export default function Explore() {
                         {getSkillIcon(topSkill.category)}
                       </div>
                       <div>
-                        <h4 className="text-white font-medium">{topSkill.title || 'New Member'}</h4>
+                        <h4 className="text-white font-medium">{topSkill.title || 'No skill listed'}</h4>
                         <p className="text-xs text-slate-500 capitalize">{topSkill.category || 'all'}</p>
                       </div>
                     </div>

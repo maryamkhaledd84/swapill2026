@@ -2067,7 +2067,7 @@ export default function Profile() {
 
                  <div className="relative">
 
-                   <div className="w-[120px] h-[120px] md:w-[140px] md:h-[140px] rounded-full border-4 border-slate-950 shadow-2xl transition-all duration-300">
+                   <div className="w-[120px] h-[120px] md:w-[140px] md:h-[140px] rounded-full border-4 border-slate-950 shadow-2xl transition-all duration-300 cursor-pointer" onClick={() => fileInputRef.current?.click()}>
 
                       {(() => {
 
@@ -2164,6 +2164,19 @@ export default function Profile() {
                       })()}
 
                     </div>
+
+                   {/* Mobile camera icon - always visible on mobile */}
+                   <button
+                     onClick={() => fileInputRef.current?.click()}
+                     className="md:hidden absolute bottom-2 right-2 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center shadow-lg border-2 border-slate-950"
+                     disabled={avatarLoading}
+                   >
+                     {avatarLoading ? (
+                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                     ) : (
+                       <Camera className="w-4 h-4 text-white" />
+                     )}
+                   </button>
 
                    {/* Hover overlay with options */}
 
