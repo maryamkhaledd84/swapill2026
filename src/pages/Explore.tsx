@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from 'react-router-dom';
-import { Search, Code, Smartphone, Palette, TrendingUp, Globe, PenTool, Music, ChefHat, Sparkles, Camera, Mic, Kanban, User, MessageCircle, Clock, Megaphone, Code2, BarChart3, Languages, Lightbulb, Share2 } from "lucide-react";
+import { Search, Code, Smartphone, Palette, TrendingUp, Globe, PenTool, Music, ChefHat, Sparkles, Camera, Mic, Kanban, User, MessageCircle, Clock, Megaphone, Code2, BarChart3, Languages, Lightbulb, Share2, Utensils, Terminal, MessageSquare, Briefcase } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import toast from 'react-hot-toast';
 import { supabase } from '../config/supabase';
@@ -14,9 +14,9 @@ import { getAvatarGradient } from '../utils/avatarColor';
 // Icon mapping function for skill categories
 const getSkillIcon = (category?: string) => {
   if (!category) return <Lightbulb size={18} />;
-  
+
   const lowerCategory = category.toLowerCase();
-  
+
   switch (lowerCategory) {
     case 'marketing':
     case 'social media':
@@ -38,6 +38,19 @@ const getSkillIcon = (category?: string) => {
       return <BarChart3 size={18} />;
     case 'languages':
       return <Languages size={18} />;
+    case 'cooking':
+      return <Utensils size={18} />;
+    case 'prompt':
+    case 'prompt engineering':
+      return <Terminal size={18} />;
+    case 'photography':
+      return <Camera size={18} />;
+    case 'speaking':
+    case 'public speaking':
+      return <MessageSquare size={18} />;
+    case 'management':
+    case 'project management':
+      return <Briefcase size={18} />;
     default:
       return <Lightbulb size={18} />;
   }
@@ -151,11 +164,11 @@ const getCategoryIcon = (category: string) => {
     'languages': Globe,
     'writing': PenTool,
     'music': Music,
-    'cooking': ChefHat,
-    'prompt': Sparkles,
+    'cooking': Utensils,
+    'prompt': Terminal,
     'photography': Camera,
-    'speaking': Mic,
-    'management': Kanban
+    'speaking': MessageSquare,
+    'management': Briefcase
   };
   return iconMap[category] || Search;
 };

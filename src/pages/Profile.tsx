@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { Camera, Edit2, Save, X, Star, MapPin, Calendar, Award, Users, TrendingUp, Check, ChevronLeft, Upload, Code, Smartphone, Palette, Globe, PenTool, Music, ChefHat, Sparkles, Mic, Kanban, Plus, User, ShieldCheck, Share2, MessageSquare, Mail, ChevronDown, Trash2, MessageCircle } from 'lucide-react';
+import { Camera, Edit2, Save, X, Star, MapPin, Calendar, Award, Users, TrendingUp, Check, ChevronLeft, Upload, Code, Smartphone, Palette, Globe, PenTool, Music, ChefHat, Sparkles, Mic, Kanban, Plus, User, ShieldCheck, Share2, MessageSquare, Mail, ChevronDown, Trash2, MessageCircle, Utensils, Terminal, Briefcase } from 'lucide-react';
 
 import { supabase } from '../config/supabase';
 
@@ -66,15 +66,15 @@ const SKILL_CATEGORIES = [
 
   { id: 'music', name: 'Music', icon: Music },
 
-  { id: 'cooking', name: 'Cooking', icon: ChefHat },
+  { id: 'cooking', name: 'Cooking', icon: Utensils },
 
-  { id: 'prompt', name: 'Prompt Engineering', icon: Sparkles },
+  { id: 'prompt', name: 'Prompt Engineering', icon: Terminal },
 
   { id: 'photography', name: 'Photography', icon: Camera },
 
-  { id: 'speaking', name: 'Public Speaking', icon: Mic },
+  { id: 'speaking', name: 'Public Speaking', icon: MessageSquare },
 
-  { id: 'management', name: 'Project Management', icon: Kanban },
+  { id: 'management', name: 'Project Management', icon: Briefcase },
 
 ];
 
@@ -538,11 +538,8 @@ export default function Profile() {
 
 
 
-      // Update local state
-
-      updateProfile({ avatar_url: publicUrl });
-
-      
+      // Refresh profile to get updated avatar_url from database
+      await refreshProfile();
 
       toast.success('Photo uploaded successfully!');
 
@@ -636,7 +633,8 @@ export default function Profile() {
 
       }
 
-      updateProfile({ cover_url: publicUrl } as any);
+      // Refresh profile to get updated cover_url from database
+      await refreshProfile();
 
       toast.success('Cover photo updated!');
 
@@ -700,7 +698,8 @@ export default function Profile() {
 
       }
 
-      updateProfile({ cover_url: null } as any);
+      // Refresh profile to get updated cover_url from database
+      await refreshProfile();
 
       toast.success('Cover photo removed');
 
@@ -804,11 +803,8 @@ export default function Profile() {
 
 
 
-      // Update local state
-
-      updateProfile({ avatar_url: null });
-
-      
+      // Refresh profile to get updated avatar_url from database
+      await refreshProfile();
 
       toast.success('Photo removed successfully!');
 
