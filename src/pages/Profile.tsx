@@ -104,6 +104,10 @@ export default function Profile() {
 
   const [showEditModal, setShowEditModal] = useState(false);
 
+  const [isEditingBio, setIsEditingBio] = useState(false);
+
+  const [bioText, setBioText] = useState('');
+
   const [editForm, setEditForm] = useState({
 
     bio: '',
@@ -134,9 +138,15 @@ export default function Profile() {
 
   const coverMenuRef = useRef<HTMLDivElement>(null);
 
+  const avatarMenuRef = useRef<HTMLDivElement>(null);
+
   const [coverLoading, setCoverLoading] = useState(false);
 
   const [showCoverMenu, setShowCoverMenu] = useState(false);
+
+  const [showAvatarMenu, setShowAvatarMenu] = useState(false);
+
+  const [isAvatarDropdownOpen, setIsAvatarDropdownOpen] = useState(false);
 
   const [targetProfile, setTargetProfile] = useState<any>(null);
 
@@ -410,6 +420,12 @@ export default function Profile() {
       if (coverMenuRef.current && !coverMenuRef.current.contains(event.target as Node)) {
 
         setShowCoverMenu(false);
+
+      }
+
+      if (avatarMenuRef.current && !avatarMenuRef.current.contains(event.target as Node)) {
+
+        setShowAvatarMenu(false);
 
       }
 
@@ -910,6 +926,84 @@ export default function Profile() {
 
 
 
+  const handleSaveBio = async () => {
+
+    if (!user) {
+
+      toast.error('You must be logged in to update your bio');
+
+      return;
+
+    }
+
+
+
+    setProfileSaveLoading(true);
+
+
+
+    try {
+
+      const newBio = bioText?.trim() || null;
+
+
+
+      const { error } = await supabase
+
+        .from('profiles')
+
+        .update({
+
+          bio: newBio,
+
+          updated_at: new Date().toISOString(),
+
+        })
+
+        .eq('id', user.id);
+
+
+
+      if (error) {
+
+        console.error('Bio update error:', error);
+
+        toast.error(`Failed to update bio: ${error.message}`);
+
+        return;
+
+      }
+
+
+
+      updateProfile({
+
+        bio: newBio || '',
+
+      });
+
+
+
+      setIsEditingBio(false);
+
+      toast.success('Bio updated');
+
+    } catch (error) {
+
+      console.error('Bio save error:', error);
+
+      toast.error('Failed to update bio');
+
+    } finally {
+
+      setProfileSaveLoading(false);
+
+    }
+
+  };
+
+
+
   const handleAddSkill = () => {
 
     setShowSkillModal(true);
@@ -1197,6 +1291,8 @@ export default function Profile() {
         location: currentUser.location || ''
 
       });
+
+      setBioText(currentUser.bio || '');
 
     }
 
@@ -1899,732 +1995,491 @@ export default function Profile() {
 
       />
 
-      {/* Header / Banner area */}
+      {/* 1. Cover Photo Container */}
 
-      <div className="relative h-56 md:h-64 rounded-3xl overflow-visible mb-6">
+      <div className="relative h-64 md:h-80 w-full overflow-hidden bg-slate-800 rounded-3xl mb-6">
 
-         {(() => {
+        {(() => {
 
-           const coverUrl = getDisplayProfile()?.cover_url;
+          const coverUrl = getDisplayProfile()?.cover_url;
 
-           if (coverUrl) {
+          if (coverUrl && !coverUrl.includes('dicebear.com')) {
 
-             return (
+            return (
 
-               <div
+              <img
 
-                 className="absolute inset-0 rounded-3xl bg-cover bg-center"
+                src={coverUrl}
 
-                 style={{ backgroundImage: `url(${coverUrl})` }}
+                className="w-full h-full object-cover"
 
-               />
+                alt="Cover"
 
-             );
+              />
 
-           }
+            );
 
-           return (
+          }
 
-             <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-purple-800 via-slate-900 to-blue-900 animate-gradient-x" />
+          return (
 
-           );
+            <div className="w-full h-full bg-gradient-to-r from-purple-800 via-slate-900 to-blue-900 animate-gradient-x" />
 
-         })()}
+          );
 
-         <div className="absolute inset-0 rounded-3xl bg-black/40 backdrop-blur-[2px]" />
+        })()}
 
 
 
-         {/* Glassmorphism effect on bottom edge */}
+        {/* Hidden cover file input */}
 
-         <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-slate-900/50 to-transparent backdrop-blur-sm rounded-b-3xl" />
+        <input
 
+          ref={coverFileInputRef}
 
+          type="file"
 
-         {/* Hidden cover file input */}
+          accept="image/*"
 
-         <input
+          onChange={handleCoverUpload}
 
-           ref={coverFileInputRef}
+          className="hidden"
 
-           type="file"
+        />
 
-           accept="image/*"
+        {/* Edit Cover button - only for own profile */}
 
-           onChange={handleCoverUpload}
+        {isViewingOwnProfile() && (
 
-           className="hidden"
+          <div ref={coverMenuRef} className="absolute top-4 right-4 z-20">
 
-         />
+            <button
 
+              onClick={() => setShowCoverMenu((s) => !s)}
 
+              disabled={coverLoading}
 
-         {/* Edit Cover menu — only for own profile */}
+              className="bg-slate-900/80 backdrop-blur-sm hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 border border-white/10 transition-all disabled:opacity-50"
 
-         {isViewingOwnProfile() && (
+            >
 
-           <div ref={coverMenuRef} className="absolute top-4 right-4 z-20">
+              {coverLoading ? (
 
-             <button
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
 
-               onClick={() => setShowCoverMenu((s) => !s)}
+              ) : (
 
-               disabled={coverLoading}
+                <Edit2 className="w-4 h-4" />
 
-               className="p-2 rounded-lg bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-all flex items-center gap-2 text-white disabled:opacity-50"
+              )}
 
-               title="Edit cover photo"
+              <span>Edit cover</span>
 
-             >
+            </button>
 
-               {coverLoading ? (
+            <AnimatePresence>
 
-                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              {showCoverMenu && (
 
-               ) : (
+                <motion.div
 
-                 <Edit2 className="w-4 h-4" />
+                  initial={{ opacity: 0, y: -8 }}
 
-               )}
+                  animate={{ opacity: 1, y: 0 }}
 
-               <span className="text-xs font-medium hidden sm:inline">Edit cover</span>
+                  exit={{ opacity: 0, y: -8 }}
 
-             </button>
-
-             <AnimatePresence>
-
-               {showCoverMenu && (
-
-                 <motion.div
-
-                   initial={{ opacity: 0, y: -8 }}
-
-                   animate={{ opacity: 1, y: 0 }}
-
-                   exit={{ opacity: 0, y: -8 }}
-
-                   className="absolute right-0 top-full mt-2 w-56 bg-slate-900 border border-white/10 rounded-xl shadow-xl overflow-hidden"
-
-                 >
-
-                   <button
-
-                     onClick={() => coverFileInputRef.current?.click()}
-
-                     disabled={coverLoading}
-
-                     className="w-full px-4 py-3 text-left text-sm text-white hover:bg-white/5 flex items-center gap-3 disabled:opacity-50"
-
-                   >
-
-                     <Upload className="w-4 h-4 text-purple-400" />
-
-                     {currentUser?.cover_url ? 'Change cover photo' : 'Upload cover photo'}
-
-                   </button>
-
-                   {currentUser?.cover_url && (
-
-                     <button
-
-                       onClick={handleRemoveCover}
-
-                       disabled={coverLoading}
-
-                       className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-white/5 flex items-center gap-3 border-t border-white/5 disabled:opacity-50"
-
-                     >
-
-                       <Trash2 className="w-4 h-4" />
-
-                       Remove cover photo
-
-                     </button>
-
-                   )}
-
-                 </motion.div>
-
-               )}
-
-             </AnimatePresence>
-
-           </div>
-
-         )}
-
-         
-
-         {/* Profile Image Container - Absolutely Positioned with High Z-Index */}
-
-         <div className="absolute bottom-[-48px] left-6 md:left-10 z-50">
-
-            <div className="relative">
-
-               {/* Profile Picture Area */}
-
-               <div className="relative group">
-
-                 <div className="relative">
-
-                   <div className="w-[120px] h-[120px] md:w-[140px] md:h-[140px] rounded-full border-4 border-slate-950 shadow-2xl transition-all duration-300 cursor-pointer pointer-events-auto" onClick={() => fileInputRef.current?.click()}>
-
-                      {(() => {
-
-                        const avatarUrl = getDisplayProfile()?.avatar_url;
-
-                        const profileName = getDisplayProfile()?.full_name || getDisplayProfile()?.name || 'User';
-
-                        
-
-                        // BLOCK dicebear URLs and show colored initials instead
-
-                        if (avatarUrl && avatarUrl.includes('dicebear.com')) {
-
-                          return (
-
-                            <div className={`w-full h-full rounded-full bg-gradient-to-br ${getAvatarColor(profileName)} flex items-center justify-center`}>
-
-                              <span className="text-white font-bold text-2xl">
-
-                                {getInitials(profileName)}
-
-                              </span>
-
-                            </div>
-
-                          );
-
-                        }
-
-                        
-
-                        // Show real photo only if it's NOT a dicebear URL
-
-                        if (avatarUrl && !avatarUrl.includes('dicebear.com')) {
-
-                          return (
-
-                            <img 
-
-                              src={avatarUrl} 
-
-                              alt="Profile" 
-
-                              className="w-full h-full object-cover rounded-full"
-
-                              style={{ aspectRatio: '1/1' }}
-
-                              onError={(e) => {
-
-                                const target = e.target as HTMLImageElement;
-
-                                target.style.display = 'none';
-
-                                const parent = target.parentElement;
-
-                                if (parent && !parent.querySelector('.fallback-circle')) {
-
-                                  const fallback = document.createElement('div');
-
-                                  fallback.className = `fallback-circle absolute inset-0 flex items-center justify-center bg-gradient-to-br ${getAvatarColor(profileName)} rounded-full text-white font-bold text-2xl`;
-
-                                  fallback.textContent = getInitials(profileName);
-
-                                  parent.appendChild(fallback);
-
-                                }
-
-                              }}
-
-                            />
-
-                          );
-
-                        }
-
-                        
-
-                        // Show colored initials if no avatar URL
-
-                        return (
-
-                          <div className={`w-full h-full rounded-full bg-gradient-to-br ${getAvatarColor(profileName)} flex items-center justify-center`}>
-
-                            <span className="text-white font-bold text-2xl">
-
-                              {getInitials(profileName)}
-
-                            </span>
-
-                          </div>
-
-                        );
-
-                      })()}
-
-                    </div>
-
-                   {/* Mobile camera icon - always visible on mobile */}
-                   <button
-                     onClick={() => fileInputRef.current?.click()}
-                     className="md:hidden absolute bottom-2 right-2 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center shadow-lg border-2 border-slate-950"
-                     disabled={avatarLoading}
-                   >
-                     {avatarLoading ? (
-                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                     ) : (
-                       <Camera className="w-4 h-4 text-white" />
-                     )}
-                   </button>
-
-                   {/* Hover overlay with options */}
-
-                   <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center cursor-pointer">
-
-                     {avatarLoading ? (
-
-                       <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin" />
-
-                     ) : (
-
-                       <>
-
-                         <Camera className="w-6 h-6 text-white mb-1" />
-
-                         <span className="text-white text-xs font-medium">Change Photo</span>
-
-                       </>
-
-                     )}
-
-                   </div>
-
-                 </div>
-
-                 
-
-                 {/* Photo action buttons */}
-
-                 <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-
-                   <button
-
-                     onClick={() => fileInputRef.current?.click()}
-
-                     disabled={avatarLoading}
-
-                     className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-
-                   >
-
-                     Change
-
-                   </button>
-
-                   {currentUser?.avatar_url && (
-
-                     <button
-
-                       onClick={handleRemovePhoto}
-
-                       disabled={avatarLoading}
-
-                       className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-
-                     >
-
-                       Remove
-
-                     </button>
-
-                   )}
-
-                 </div>
-
-                 </div>
-
-               <div className="absolute bottom-1.5 right-1.5 w-5 h-5 bg-green-500 border-[3px] border-slate-950 rounded-full" title="Online" />
-
-            </div>
-
-         </div>
-
-      </div>
-
-      
-
-      {/* Hidden file input */}
-
-      <input
-
-        ref={fileInputRef}
-
-        type="file"
-
-        accept="image/*"
-
-        onChange={handleImageUpload}
-
-        className="hidden"
-
-      />
-
-      {/* Profile Info Section - sits beside the avatar on md+ */}
-
-      <div className="px-2 md:pl-44 pt-16 md:pt-2">
-
-         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
-
-            <div className="text-center md:text-left flex-1 min-w-0">
-
-               <h1 className="text-3xl md:text-4xl font-bold flex items-center justify-center md:justify-start gap-2 mb-1">
-
-                  <span className="truncate">{getDisplayProfile()?.full_name || getDisplayProfile()?.name || getDisplayProfile()?.username || 'Member'}</span>
-
-                  <ShieldCheck className="w-5 h-5 md:w-6 md:h-6 text-blue-400 flex-shrink-0" />
-
-               </h1>
-
-               <p className="text-slate-400 text-sm mb-2">Expertise Swapper</p>
-
-               <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1 text-xs text-slate-500">
-
-                  <div className="flex items-center gap-1.5">
-
-                     <MapPin className="w-3.5 h-3.5" />
-
-                     {currentUser?.location || 'Add your location'}
-
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-
-                     <Calendar className="w-3.5 h-3.5" />
-
-                     Joined {formatDate(currentUser?.joinDate || '')}
-
-                  </div>
-
-               </div>
-
-            </div>
-
-
-
-            <div className="flex gap-2 justify-center md:justify-end">
-
-               <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const shareId = profileId || user?.id;
-                    if (!shareId) {
-                      toast.error('Unable to share profile');
-                      return;
-                    }
-                    const displayName =
-                      getDisplayProfile()?.full_name ||
-                      getDisplayProfile()?.name ||
-                      getDisplayProfile()?.username ||
-                      'Member';
-                    shareOrCopy({
-                      url: profileShareUrl(shareId),
-                      title: `${displayName} on Swapill`,
-                      text: `Check out ${displayName}'s profile on Swapill`,
-                    });
-                  }}
-                  className="btn-secondary p-2.5 rounded-xl cursor-pointer relative z-10"
-                  aria-label="Share profile"
-                  title="Share profile"
-               >
-
-                  <Share2 className="w-4 h-4 pointer-events-none" />
-
-               </button>
-
-               <button
-
-                  onClick={() => navigate('/explore')}
-
-                  className="btn-primary px-5 py-2.5 flex items-center gap-2 text-sm"
-
-               >
-
-                  <MessageSquare className="w-4 h-4" />
-
-                  Start Exchange
-
-               </button>
-
-            </div>
-
-         </div>
-
-      </div>
-
-
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-
-        {/* Left Column: About */}
-
-        <div className="space-y-6">
-
-           <section className="glass-card p-6">
-
-              <div className="flex items-center justify-between mb-4">
-
-                <h3 className="text-lg font-bold">About Me</h3>
-
-                <button
-
-                  onClick={() => setShowEditModal(true)}
-
-                  title="Edit profile"
-
-                  className="p-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
+                  className="absolute right-0 top-full mt-2 w-56 bg-slate-900 border border-white/10 rounded-xl shadow-xl overflow-hidden"
 
                 >
 
-                  <Edit2 className="w-3.5 h-3.5 text-gray-400" />
+                  <button
 
-                </button>
+                    onClick={() => coverFileInputRef.current?.click()}
 
-              </div>
+                    disabled={coverLoading}
 
-                {profile?.bio ? (
+                    className="w-full px-4 py-3 text-left text-sm text-white hover:bg-white/5 flex items-center gap-3 disabled:opacity-50"
 
-                  <p className="text-slate-400 leading-relaxed mb-6 text-sm">
+                  >
 
-                    {profile?.bio}
+                    <Upload className="w-4 h-4 text-purple-400" />
 
-                  </p>
+                    {currentUser?.cover_url ? 'Change cover photo' : 'Upload cover photo'}
 
-                ) : (
+                  </button>
 
-                  <p className="text-slate-500 leading-relaxed mb-6 italic text-sm">
+                  {currentUser?.cover_url && (
 
-                    No bio added yet. Tell others about yourself and what skills you can share...
+                    <button
 
-                  </p>
+                      onClick={handleRemoveCover}
 
-                )}
+                      disabled={coverLoading}
 
-                <div className="space-y-3 text-sm">
-
-                 <div className="flex items-center gap-3 text-slate-300">
-
-                    <MapPin className="w-4 h-4 text-slate-500 flex-shrink-0" />
-
-                    <span className="truncate">{currentUser?.location || 'Add your location'}</span>
-
-                 </div>
-
-                 <div className="flex items-center gap-3 text-slate-300">
-
-                    <Calendar className="w-4 h-4 text-slate-500 flex-shrink-0" />
-
-                    Joined {formatDate(currentUser?.joinDate || '')}
-
-                 </div>
-
-                 <div className="flex items-center gap-3 text-slate-300">
-
-                    <Mail className="w-4 h-4 text-slate-500 flex-shrink-0" />
-
-                    <span className="truncate">{currentUser?.email || currentUser?.name || 'Expert Member'}</span>
-
-                 </div>
-
-                </div>
-
-           </section>
-
-
-
-           <section className="glass-card p-6">
-
-              <h3 className="text-lg font-bold mb-4">Statistics</h3>
-
-              <div className="space-y-4">
-
-                 {(currentUser?.trustScore ?? 0) > 0 && (
-
-                   <div>
-
-                      <div className="flex justify-between text-sm mb-2">
-
-                         <span className="text-slate-400">Trust Score</span>
-
-                         <span className="text-green-400 font-bold">{currentUser?.trustScore}%</span>
-
-                      </div>
-
-                      <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-
-                         <div className="h-full bg-green-500" style={{ width: `${currentUser?.trustScore}%` }} />
-
-                      </div>
-
-                   </div>
-
-                 )}
-
-                 <div className="grid grid-cols-2 gap-3">
-
-                    <div className="p-3 rounded-xl bg-white/5 text-center">
-
-                       <div className="text-xl font-bold">{currentUser?.endorsements || 0}</div>
-
-                       <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mt-0.5">Endorsements</div>
-
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-white/5 text-center">
-
-                       <div className="text-xl font-bold">{currentUser?.exchanges || 0}</div>
-
-                       <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mt-0.5">Exchanges</div>
-
-                    </div>
-
-                 </div>
-
-              </div>
-
-           </section>
-
-        </div>
-
-
-
-        {/* Right Column: Skills & Reviews */}
-
-        <div className="lg:col-span-2 space-y-8">
-
-          <section>
-
-            <div className="flex items-center justify-between mb-5">
-
-              <h2 className="text-xl font-bold">Active Offerings</h2>
-
-              <div className="relative" ref={dropdownRef}>
-
-                <button
-
-                  onClick={() => setShowSkillsDropdown(!showSkillsDropdown)}
-
-                  className="text-slate-500 text-sm font-medium hover:text-purple-400 hover:underline cursor-pointer transition-all flex items-center gap-1"
-
-                >
-
-                  {currentUser?.skills?.length || 0} Skills Available
-
-                  <ChevronDown className={`w-3 h-3 transition-transform ${showSkillsDropdown ? 'rotate-180' : ''}`} />
-
-                </button>
-
-                
-
-                <AnimatePresence>
-
-                  {showSkillsDropdown && (
-
-                    <motion.div
-
-                      initial={{ opacity: 0, y: -10 }}
-
-                      animate={{ opacity: 1, y: 0 }}
-
-                      exit={{ opacity: 0, y: -10 }}
-
-                      className="absolute right-0 top-full mt-2 w-80 bg-slate-900 border border-white/10 rounded-xl shadow-xl z-50 max-h-96 overflow-y-auto"
+                      className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-white/5 flex items-center gap-3 border-t border-white/5 disabled:opacity-50"
 
                     >
 
-                      <div className="p-4">
+                      <Trash2 className="w-4 h-4" />
 
-                        <h4 className="text-sm font-semibold text-white mb-3">My Skills</h4>
+                      Remove cover photo
 
-                        {displaySkills.length > 0 ? (
-
-                          <div className="space-y-2">
-
-                            {displaySkills.map((skill: any) => (
-
-                              <div key={skill.id} className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.05] transition-colors">
-
-                                <div className="flex-1">
-
-                                  <div className="font-medium text-white text-sm">{skill.title}</div>
-
-                                  <div className="text-xs text-slate-500 uppercase tracking-wider">{skill.category}</div>
-
-                                </div>
-
-                                <div className="flex items-center gap-2">
-
-                                  <button
-
-                                    onClick={() => handleEditSkillFromDropdown(skill)}
-
-                                    className="text-slate-400 hover:text-white transition-colors p-1"
-
-                                    title="Edit skill"
-
-                                  >
-
-                                    <Edit2 className="w-3 h-3" />
-
-                                  </button>
-
-                                  <button
-
-                                    onClick={() => handleDeleteSkill(skill.id)}
-
-                                    className="text-slate-400 hover:text-red-400 transition-colors p-1"
-
-                                    title="Delete skill"
-
-                                  >
-
-                                    <Trash2 className="w-3 h-3" />
-
-                                  </button>
-
-                                </div>
-
-                              </div>
-
-                            ))}
-
-                          </div>
-
-                        ) : (
-
-                          <div className="text-center py-4">
-
-                            <p className="text-slate-400 text-sm">No skills added yet</p>
-
-                          </div>
-
-                        )}
-
-                      </div>
-
-                    </motion.div>
+                    </button>
 
                   )}
 
-                </AnimatePresence>
+                </motion.div>
+
+              )}
+
+            </AnimatePresence>
+
+          </div>
+
+        )}
+
+      </div>
+
+      {/* 2. Main Content Wrapper */}
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+
+        {/* Grid layout splitting About Me and Skills Dashboard */}
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+          {/* LEFT COLUMN: About Me (Takes 4 cols out of 12) */}
+
+          <div className="lg:col-span-4 bg-[#1e293b]/90 backdrop-blur-md border border-white/10 rounded-3xl p-6 shadow-xl flex flex-col items-center text-center relative pt-28">
+
+            {/* Floating Avatar EXACTLY centered on top of the card border */}
+
+            <div className="absolute -top-20 left-1/2 -translate-x-1/2">
+
+              <div className="relative w-36 h-36 rounded-full border-4 border-[#0f172a] bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-2xl">
+
+                {/* 1. Initials or Image (Perfectly Centered) */}
+
+                {(() => {
+
+                  const avatarUrl = getDisplayProfile()?.avatar_url;
+
+                  const profileName = getDisplayProfile()?.full_name || getDisplayProfile()?.name || 'User';
+
+                  // BLOCK dicebear URLs and show colored initials instead
+
+                  if (avatarUrl && avatarUrl.includes('dicebear.com')) {
+
+                    return (
+
+                      <span className="text-white font-bold text-4xl tracking-wider select-none transform translate-y-[-2px]">
+
+                        {getInitials(profileName)}
+
+                      </span>
+
+                    );
+
+                  }
+
+                  // Show real photo only if it's NOT a dicebear URL
+
+                  if (avatarUrl && !avatarUrl.includes('dicebear.com')) {
+
+                    return (
+
+                      <img
+
+                        src={avatarUrl}
+
+                        className="w-full h-full object-cover rounded-full"
+
+                        alt="Avatar"
+
+                        onError={(e) => {
+
+                          const target = e.target as HTMLImageElement;
+
+                          target.style.display = 'none';
+
+                          const parent = target.parentElement;
+
+                          if (parent && !parent.querySelector('.fallback-circle')) {
+
+                            const fallback = document.createElement('div');
+
+                            fallback.className = 'fallback-circle absolute inset-0 flex items-center justify-center text-white font-bold text-4xl tracking-wider select-none transform translate-y-[-2px]';
+
+                            fallback.textContent = getInitials(profileName);
+
+                            parent.appendChild(fallback);
+
+                          }
+
+                        }}
+
+                      />
+
+                    );
+
+                  }
+
+                  // Show colored initials if no avatar URL
+
+                  return (
+
+                    <span className="text-white font-bold text-4xl tracking-wider select-none transform translate-y-[-2px]">
+
+                      {getInitials(profileName)}
+
+                    </span>
+
+                  );
+
+                })()}
+
+                {/* 2. Small Pencil Trigger Badge - only for own profile */}
+
+                {isViewingOwnProfile() && (
+
+                  <button
+
+                    type="button"
+
+                    onClick={() => setIsAvatarDropdownOpen(!isAvatarDropdownOpen)}
+
+                    className="absolute bottom-1 right-1 bg-slate-900 text-white border border-white/20 p-2 rounded-full hover:bg-slate-800 transition-all shadow-lg z-20 cursor-pointer"
+
+                  >
+
+                    <Edit2 className="w-4 h-4" />
+
+                  </button>
+
+                )}
+
+                {/* 3. Floating Dropdown Menu (Strictly on top, doesn't shift layout) */}
+
+                {isViewingOwnProfile() && isAvatarDropdownOpen && (
+
+                  <div className="absolute top-[100%] right-0 mt-2 w-48 bg-[#1e293b] border border-white/10 rounded-2xl shadow-2xl p-1.5 z-50">
+
+                    <button
+
+                      type="button"
+
+                      onClick={() => {
+
+                        fileInputRef.current?.click();
+
+                        setIsAvatarDropdownOpen(false);
+
+                      }}
+
+                      disabled={avatarLoading}
+
+                      className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-white/5 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50"
+
+                    >
+
+                      <Upload className="w-4 h-4 text-purple-400" />
+
+                      Upload Photo
+
+                    </button>
+
+                    {currentUser?.avatar_url && (
+
+                      <button
+
+                        type="button"
+
+                        onClick={() => {
+
+                          handleRemovePhoto();
+
+                          setIsAvatarDropdownOpen(false);
+
+                        }}
+
+                        disabled={avatarLoading}
+
+                        className="w-full text-left px-4 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/10 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50"
+
+                      >
+
+                        <Trash2 className="w-4 h-4" />
+
+                        Remove Photo
+
+                      </button>
+
+                    )}
+
+                  </div>
+
+                )}
 
               </div>
 
             </div>
 
-            
+            {/* Online indicator */}
+
+            <div className="absolute bottom-1.5 right-1.5 w-5 h-5 bg-green-500 border-[3px] border-[#0f172a] rounded-full" title="Online" />
+
+            {/* Profile Data (Safely inside the card) */}
+
+            <h2 className="text-2xl font-bold text-white mb-1 flex items-center justify-center gap-2">
+
+              {getDisplayProfile()?.full_name || getDisplayProfile()?.name || getDisplayProfile()?.username || 'Member'}
+
+              <ShieldCheck className="w-5 h-5 text-blue-400 flex-shrink-0" />
+
+            </h2>
+
+            <p className="text-purple-400 text-sm font-medium mb-4">Expertise Swapper</p>
+
+            <div className="w-full border-t border-white/5 my-4"></div>
+
+            <div className="w-full text-left space-y-3 text-sm text-slate-400">
+
+              <div className="flex items-start gap-2">
+                {isEditingBio ? (
+                  <div className="flex-1">
+                    <textarea
+                      value={bioText}
+                      onChange={(e) => setBioText(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white text-sm resize-none focus:outline-none focus:border-purple-500"
+                      rows={3}
+                      placeholder="Tell others about yourself..."
+                    />
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={handleSaveBio}
+                        disabled={profileSaveLoading}
+                        className="px-3 py-1.5 bg-purple-600 text-white text-xs rounded-lg hover:bg-purple-500 disabled:opacity-50"
+                      >
+                        {profileSaveLoading ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsEditingBio(false);
+                          setBioText(profile?.bio || '');
+                        }}
+                        className="px-3 py-1.5 bg-slate-700 text-white text-xs rounded-lg hover:bg-slate-600"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1">
+                    <p className="italic">"{profile?.bio || 'New member on Swapill'}"</p>
+                  </div>
+                )}
+                {isViewingOwnProfile() && !isEditingBio && (
+                  <button
+                    onClick={() => {
+                      setIsEditingBio(true);
+                      setBioText(profile?.bio || '');
+                    }}
+                    className="p-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all flex-shrink-0"
+                    title="Edit bio"
+                  >
+                    <Edit2 className="w-3.5 h-3.5 text-gray-400" />
+                  </button>
+                )}
+              </div>
+
+              <p>📍 {currentUser?.location || 'Location not set'}</p>
+
+              <p>📅 Joined {formatDate(currentUser?.joinDate || '')}</p>
+
+              <p className="text-xs text-slate-500 break-all">✉️ {currentUser?.email || currentUser?.name || 'Expert Member'}</p>
+
+            </div>
+
+            {/* Action buttons */}
+
+            <div className="flex gap-2 mt-6 w-full">
+
+              <button
+
+                type="button"
+
+                onClick={(e) => {
+
+                  e.preventDefault();
+
+                  e.stopPropagation();
+
+                  const shareId = profileId || user?.id;
+
+                  if (!shareId) {
+
+                    toast.error('Unable to share profile');
+
+                    return;
+
+                  }
+
+                  const displayName =
+
+                    getDisplayProfile()?.full_name ||
+
+                    getDisplayProfile()?.name ||
+
+                    getDisplayProfile()?.username ||
+
+                    'Member';
+
+                  shareOrCopy({
+
+                    url: profileShareUrl(shareId),
+
+                    title: `${displayName} on Swapill`,
+
+                    text: `Check out ${displayName}'s profile on Swapill`,
+
+                  });
+
+                }}
+
+                className="flex-1 btn-secondary p-2.5 rounded-xl cursor-pointer relative z-10"
+
+                aria-label="Share profile"
+
+                title="Share profile"
+
+              >
+
+                <Share2 className="w-4 h-4 pointer-events-none mx-auto" />
+
+              </button>
+
+              <button
+
+                onClick={() => navigate('/explore')}
+
+                className="flex-1 btn-primary px-5 py-2.5 flex items-center justify-center gap-2 text-sm"
+
+              >
+
+                <MessageSquare className="w-4 h-4" />
+
+                Start Exchange
+
+              </button>
+
+            </div>
+
+          </div>
+
+          {/* RIGHT COLUMN: Skills Grid (Takes 8 cols out of 12) */}
+
+          <div className="lg:col-span-8">
 
             {/* Skills Grid with Categories */}
 
@@ -2635,8 +2490,6 @@ export default function Profile() {
                 const hasSkills = displaySkills.some((skill: any) => skill.category === category.id);
 
                 const categorySkills = displaySkills.filter((skill: any) => skill.category === category.id);
-
-                
 
                 return (
 
@@ -2691,8 +2544,6 @@ export default function Profile() {
                         )}
 
                       </div>
-
-                      
 
                       {/* Category Info */}
 
@@ -2782,8 +2633,6 @@ export default function Profile() {
 
             </div>
 
-            
-
             {/* Add All Skills Button */}
 
             <div className="mt-8 text-center">
@@ -2804,63 +2653,81 @@ export default function Profile() {
 
             </div>
 
-          </section>
-
-
-
-          <section className="glass-card p-6">
-
-            <div className="flex items-center justify-between mb-5">
-
-              <h2 className="text-xl font-bold">Reviews & Feedback</h2>
-
-              {(currentUser?.exchanges ?? 0) > 0 && (currentUser?.trustScore ?? 0) > 0 && (
-
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10 text-yellow-500 text-sm font-semibold">
-
-                   <Star className="w-3.5 h-3.5 fill-current" />
-
-                   {(currentUser?.trustScore ?? 0).toFixed(1)}
-
-                </div>
-
-              )}
-
-            </div>
-
-            {(currentUser?.exchanges ?? 0) === 0 ? (
-
-              <div className="text-center py-8">
-
-                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500/20 to-violet-500/20 flex items-center justify-center mx-auto mb-3">
-
-                  <MessageCircle className="w-7 h-7 text-purple-400" />
-
-                </div>
-
-                <div className="text-white text-base font-semibold mb-1">No reviews yet</div>
-
-                <div className="text-slate-400 text-sm">Reviews will appear here after your first swap.</div>
-
-              </div>
-
-            ) : (
-
-              <div className="text-slate-400 text-sm py-4 text-center">
-
-                Reviews from your swap partners will appear here.
-
-              </div>
-
-            )}
-
-          </section>
+          </div>
 
         </div>
 
       </div>
 
-      
+      {/* Reviews Section */}
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
+
+        <section className="glass-card p-6">
+
+          <div className="flex items-center justify-between mb-5">
+
+            <h2 className="text-xl font-bold">Reviews & Feedback</h2>
+
+            {(currentUser?.exchanges ?? 0) > 0 && (currentUser?.trustScore ?? 0) > 0 && (
+
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-yellow-500/10 text-yellow-500 text-sm font-semibold">
+
+                 <Star className="w-3.5 h-3.5 fill-current" />
+
+                 {(currentUser?.trustScore ?? 0).toFixed(1)}
+
+              </div>
+
+            )}
+
+          </div>
+
+          {(currentUser?.exchanges ?? 0) === 0 ? (
+
+            <div className="text-center py-8">
+
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500/20 to-violet-500/20 flex items-center justify-center mx-auto mb-3">
+
+                <MessageCircle className="w-7 h-7 text-purple-400" />
+
+              </div>
+
+              <div className="text-white text-base font-semibold mb-1">No reviews yet</div>
+
+              <div className="text-slate-400 text-sm">Reviews will appear here after your first swap.</div>
+
+            </div>
+
+          ) : (
+
+            <div className="text-slate-400 text-sm py-4 text-center">
+
+              Reviews from your swap partners will appear here.
+
+            </div>
+
+          )}
+
+        </section>
+
+      </div>
+
+      {/* Hidden file input */}
+
+      <input
+
+        ref={fileInputRef}
+
+        type="file"
+
+        accept="image/*"
+
+        onChange={handleImageUpload}
+
+        className="hidden"
+
+      />
 
       {/* Edit Profile Modal */}
 
@@ -2914,8 +2781,6 @@ export default function Profile() {
 
               </div>
 
-              
-
               <div className="space-y-6">
 
                 <div>
@@ -2942,8 +2807,6 @@ export default function Profile() {
 
                 </div>
 
-                
-
                 <div>
 
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -2967,8 +2830,6 @@ export default function Profile() {
                   />
 
                 </div>
-
-                
 
                 <div className="flex gap-3 pt-4">
 
@@ -3024,10 +2885,6 @@ export default function Profile() {
 
       </AnimatePresence>
 
-      
-
-            
-
       {/* Add Skill Modal */}
 
       <AnimatePresence>
@@ -3080,8 +2937,6 @@ export default function Profile() {
 
               </div>
 
-              
-
               <div className="space-y-6">
 
                 <div>
@@ -3116,8 +2971,6 @@ export default function Profile() {
 
                 </div>
 
-                
-
                 <div>
 
                   <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -3141,8 +2994,6 @@ export default function Profile() {
                   />
 
                 </div>
-
-                
 
                 <div>
 
@@ -3170,15 +3021,13 @@ export default function Profile() {
 
               </div>
 
-              
-
               <div className="flex gap-4 mt-8">
 
                 <button
 
                   onClick={() => setShowSkillModal(false)}
 
-                  className="flex-1 px-6 py-3 bg-white/5 border border-white/20 text-white rounded-xl hover:bg-white/10 transition-all"
+                  className="flex-1 py-3 bg-white/5 border border-white/10 text-white font-medium rounded-lg hover:bg-white/10 transition-all"
 
                 >
 
@@ -3188,27 +3037,27 @@ export default function Profile() {
 
                 <button
 
-                  onClick={handleSaveSkill}
+                  onClick={handleAddSkill}
 
-                  disabled={!skillForm.title.trim() || skillLoading}
+                  disabled={skillLoading}
 
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl hover:from-purple-400 hover:to-violet-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-violet-600 text-white font-semibold rounded-lg hover:from-purple-500 hover:to-violet-500 transition-all shadow-lg shadow-purple-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
 
                 >
 
                   {skillLoading ? (
 
-                    <div className="flex items-center justify-center gap-2">
+                    <>
 
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
 
-                      Saving...
+                      <span>Adding...</span>
 
-                    </div>
+                    </>
 
                   ) : (
 
-                    'Add Skill'
+                    <span>Add Skill</span>
 
                   )}
 
