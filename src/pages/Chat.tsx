@@ -91,6 +91,7 @@ export default function Chat() {
   const messagesChannelRef = useRef<any>(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [showChatArea, setShowChatArea] = useState(false);
   // Cache of messages per conversation id, so re-opening is instant.
   const messagesCacheRef = useRef<Map<string, Message[]>>(new Map());
   // Tracks the most recently opened conversation so we can ignore late-arriving
@@ -807,8 +808,8 @@ export default function Chat() {
   return (
     <div className="flex h-full w-full overflow-hidden bg-transparent">
       <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
-        {/* Sidebar - Always visible with consistent layout */}
-        <aside className="w-full lg:w-80 h-full lg:h-full bg-slate-800/50 backdrop-blur-md border-r border-purple-500/10 flex flex-col pt-0">
+        {/* Sidebar - Hidden on mobile when chat is open */}
+        <aside className={`${showChatArea ? 'hidden' : 'block'} md:block w-full lg:w-80 h-full lg:h-full bg-slate-800/50 backdrop-blur-md border-r border-purple-500/10 flex flex-col pt-0`}>
         {/* Sidebar Header */}
         <div className="p-5 border-b border-slate-700/50">
           <div className="flex items-center justify-between mb-5">
@@ -921,6 +922,8 @@ export default function Chat() {
                         markMessagesAsRead(conv.id);
                         // 4. Then open the conversation
                         openConversation(conv);
+                        // 5. Show chat area on mobile
+                        setShowChatArea(true);
                       }}
                       className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all cursor-pointer relative ${
                         activeConversation?.id === conv.id
@@ -965,16 +968,16 @@ export default function Chat() {
         </div>
       </aside>
 
-      {/* Chat Window - Takes remaining space, full width on mobile */}
-      <main className="flex-1 h-full min-h-0 flex flex-col bg-slate-900/30 backdrop-blur-sm w-full overflow-hidden">
+      {/* Chat Window - Visible on mobile only when chat is open */}
+      <main className={`${showChatArea ? 'block' : 'hidden'} md:block flex-1 h-full min-h-0 flex flex-col bg-slate-900/30 backdrop-blur-sm w-full overflow-hidden`}>
         {selectedUser ? (
           <>
             {/* Chat Header - pinned at top while messages scroll under it */}
             <header className="flex-shrink-0 h-14 border-b border-slate-700/30 bg-slate-800/60 backdrop-blur-md flex items-center px-4 z-10">
               {/* Mobile Back Button */}
               <button
-                onClick={() => setSelectedUser(null)}
-                className="lg:hidden p-1.5 rounded-lg hover:bg-slate-700/50 text-gray-300 transition-colors mr-2"
+                onClick={() => setShowChatArea(false)}
+                className="md:hidden p-1.5 rounded-lg hover:bg-slate-700/50 text-gray-300 transition-colors mr-2"
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
