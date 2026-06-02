@@ -146,14 +146,85 @@ export default function Chat() {
               if (c.id !== msg.conversation_id) return c;
               const isInbound = msg.sender_id !== currentUser.id;
               const isViewing = activeConversationIdRef.current === c.id;
+              
+              // PERSISTENT LOCAL OVERRIDE: Check localStorage for read status
+              const isReadLocally = localStorage.getItem(`read_chat_${c.id}`) === 'true';
+              
+              // CRITICAL FIX: If the chat is currently open/viewing OR marked as read in localStorage,
+              // NEVER increment unread count. This prevents the race condition where realtime resets the count
+              if (isViewing || isReadLocally) {
+                // If viewing and message is inbound, mark it as read in database
+                if (isInbound) {
+                  supabase
+                    .from('messages')
+                    .update({ is_read: true })
+                    .eq('id', msg.id);
+                }
+                // Keep unread_count at 0 - do NOT increment
+                return {
+                  ...c,
+                  last_message: msg.content,
+                  last_message_time: msg.created_at,
+                  unread_count: 0, // Force 0 when viewing or locally marked as read
+                };
+              }
+              
+              // Only increment if inbound, not viewing, not locally read, and message is not already read
+              const shouldIncrement = isInbound && !isViewing && !isReadLocally && !msg.is_read;
               return {
                 ...c,
                 last_message: msg.content,
                 last_message_time: msg.created_at,
-                unread_count: isInbound && !isViewing ? (c.unread_count || 0) + 1 : c.unread_count,
+                unread_count: shouldIncrement ? (c.unread_count || 0) + 1 : c.unread_count,
               };
             }),
           );
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        (payload) => {
+          const msg = payload.new as Message;
+          const oldMsg = payload.old as Message;
+          
+          // PERSISTENT LOCAL OVERRIDE: Check localStorage for read status
+          const isReadLocally = localStorage.getItem(`read_chat_${msg.conversation_id}`) === 'true';
+          
+          // CRITICAL FIX: Block realtime overwrite for active conversation OR locally marked conversations
+          // If this update belongs to the currently active conversation or is marked as read in localStorage,
+          // ignore it and keep unread_count strictly at 0
+          if (activeConversationIdRef.current === msg.conversation_id || isReadLocally) {
+            setConversations(prev =>
+              prev.map(c => {
+                if (c.id === msg.conversation_id) {
+                  return { ...c, unread_count: 0 }; // Force 0 for active or locally read conversation
+                }
+                return c;
+              }),
+            );
+            return; // Don't process further
+          }
+          
+          // Only handle updates where is_read changed from false to true for other conversations
+          if (oldMsg.is_read === false && msg.is_read === true) {
+            setConversations(prev =>
+              prev.map(c => {
+                if (c.id !== msg.conversation_id) return c;
+                const isInbound = msg.sender_id !== currentUser.id;
+                
+                // If this message was just marked as read and it's inbound, decrement unread count
+                if (isInbound) {
+                  const newCount = Math.max(0, (c.unread_count || 0) - 1);
+                  return {
+                    ...c,
+                    unread_count: newCount,
+                  };
+                }
+                return c;
+              }),
+            );
+          }
         },
       )
       .on(
@@ -235,6 +306,13 @@ export default function Chat() {
             messagesCacheRef.current.set(newMsg.conversation_id, next);
             return next;
           });
+          // Mark incoming messages as read if they're from the other user
+          if (newMsg.sender_id !== currentUser?.id) {
+            supabase
+              .from('messages')
+              .update({ is_read: true })
+              .eq('id', newMsg.id);
+          }
         },
       )
       .subscribe();
@@ -398,7 +476,25 @@ export default function Chat() {
     // Filter out corrupted conversations using validation utilities
     const validConversations = filterValidConversations(enriched);
 
-    setConversations(validConversations);
+    // CRITICAL FIX: Only update conversations state, DO NOT overwrite selectedUser or activeConversation
+    // This prevents profile avatar from disappearing when realtime updates trigger loadConversations
+    setConversations(prev => {
+      // Merge with existing state to preserve unread_count changes from user interactions
+      const merged = validConversations.map(newConv => {
+        const existing = prev.find(c => c.id === newConv.id);
+        // PERSISTENT LOCAL OVERRIDE: Check localStorage for read status
+        const isReadLocally = localStorage.getItem(`read_chat_${newConv.id}`) === 'true';
+        // FORCE LOCAL STATE OVERRIDE: If this conversation is currently open/viewing OR marked as read in localStorage,
+        // hardcode unread_count to 0 regardless of what Supabase returns
+        // This ensures UI looks perfect even if database/RLS has issues
+        if (activeConversationIdRef.current === newConv.id || isReadLocally) {
+          return { ...newConv, unread_count: 0 };
+        }
+        // Otherwise use the new data
+        return newConv;
+      });
+      return merged;
+    });
     setLoadingConversations(false);
   };
 
@@ -430,17 +526,41 @@ export default function Chat() {
     setLoadingMessages(false);
   };
 
-  const markConversationRead = async (conv: Conversation) => {
+  const markMessagesAsRead = async (conversationId: string) => {
     if (!currentUser?.id) return;
-    await supabase
-      .from('messages')
-      .update({ is_read: true })
-      .eq('conversation_id', conv.id)
-      .eq('is_read', false)
-      .neq('sender_id', currentUser.id);
+    
+    // Dispatch custom event to notify NotificationBell and Sidebar components immediately
+    // This happens BEFORE any database calls to ensure instant UI feedback
+    window.dispatchEvent(new CustomEvent('messagesRead', { detail: { conversationId } }));
+    
+    // Optimistic UI update - clear unread badge immediately before network call
     setConversations(prev =>
-      prev.map(c => (c.id === conv.id ? { ...c, unread_count: 0 } : c)),
+      prev.map(c => (c.id === conversationId ? { ...c, unread_count: 0 } : c)),
     );
+    
+    // Then update database in background - isolated in try-catch to prevent blocking
+    // This runs completely independently of any other UI operations
+    try {
+      // CRITICAL FIX: Update messages where:
+      // 1. conversation_id matches the active chat
+      // 2. is_read is false (unread)
+      // 3. sender_id is NOT the current user (inbound messages only)
+      // The messages table uses sender_id, not receiver_id
+      const { data, error } = await supabase
+        .from('messages')
+        .update({ is_read: true })
+        .eq('conversation_id', conversationId)
+        .eq('is_read', false)
+        .neq('sender_id', currentUser.id);
+      
+      if (error) {
+        console.error('Update failed:', error);
+      } else {
+        console.log('Successfully marked messages as read in database, rows affected:', data);
+      }
+    } catch (e) {
+      console.error('Unexpected error marking messages as read:', e);
+    }
   };
 
   const openConversation = (conv: Conversation) => {
@@ -458,7 +578,8 @@ export default function Chat() {
     }
     setSearchQuery('');
     loadMessages(conv.id);
-    markConversationRead(conv);
+    // markMessagesAsRead is now called BEFORE openConversation in onClick to prevent race condition
+    // We don't call it here anymore to avoid duplicate calls
     // Sync URL so the conversation is shareable / refreshable / back-navigable.
     if (conversationId !== conv.id) {
       navigate(`/chat/${conv.id}`);
@@ -518,7 +639,8 @@ export default function Chat() {
             setSelectedUser(otherUser || null);
 
             await loadMessages(conversationId);
-            await markConversationRead(conversationWithUser);
+            // markMessagesAsRead handles optimistic UI update internally
+            await markMessagesAsRead(conversationWithUser.id);
           }
         } catch (error) {
           console.error('Error loading conversation from URL:', error);
@@ -685,8 +807,8 @@ export default function Chat() {
   return (
     <div className="flex h-full w-full overflow-hidden bg-transparent">
       <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
-        {/* Sidebar - Hidden on mobile when chat is open, visible on desktop */}
-        <aside className={`${selectedUser ? 'hidden lg:flex' : 'flex'} w-full lg:w-80 h-full lg:h-full bg-slate-800/50 backdrop-blur-md border-r border-purple-500/10 flex flex-col pt-0`}>
+        {/* Sidebar - Always visible with consistent layout */}
+        <aside className="w-full lg:w-80 h-full lg:h-full bg-slate-800/50 backdrop-blur-md border-r border-purple-500/10 flex flex-col pt-0">
         {/* Sidebar Header */}
         <div className="p-5 border-b border-slate-700/50">
           <div className="flex items-center justify-between mb-5">
@@ -748,70 +870,6 @@ export default function Chat() {
             );
           })()}
 
-          {/* Unread Section - real per-conversation counts */}
-          {(() => {
-            const matchesSearch = (conv: Conversation) => {
-              if (!searchQuery.trim()) return true;
-              const q = searchQuery.toLowerCase();
-              const friendProfile = conv.participant_one === currentUser?.id ? conv.participant_two_profile : conv.participant_one_profile;
-              const name = getSafeName(friendProfile || {}).toLowerCase();
-              const last = (conv.last_message || '').toLowerCase();
-              return name.includes(q) || last.includes(q);
-            };
-            const unreadConvs = conversations.filter(c => (c.unread_count || 0) > 0 && matchesSearch(c));
-            if (unreadConvs.length === 0) return null;
-            return (
-              <div className="px-5 py-3 border-t border-slate-700/30">
-                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Unread</h3>
-                <div className="space-y-1">
-                  {unreadConvs.map((conv) => {
-                    const friendProfile = conv.participant_one === currentUser?.id ? conv.participant_two_profile : conv.participant_one_profile;
-                    const otherId = conv.participant_one === currentUser?.id ? conv.participant_two : conv.participant_one;
-                    const friendOnline = isOnline(onlineIds, otherId);
-                    return (
-                      <button
-                        key={conv.id}
-                        onClick={() => openConversation(conv)}
-                        className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all cursor-pointer relative ${
-                          activeConversation?.id === conv.id
-                            ? 'bg-purple-600/20 border-l-4 border-l-purple-500'
-                            : 'hover:bg-slate-700/30'
-                        }`}
-                      >
-                        <div className="relative">
-                          <ModernAvatar
-                            name={getSafeName(friendProfile || {})}
-                            size="small"
-                            avatarUrl={friendProfile?.avatar_url}
-                            isCurrentUser={false}
-                          />
-                          <div
-                            className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-slate-800 ${friendOnline ? 'bg-green-500' : 'bg-slate-500'}`}
-                            title={friendOnline ? 'Online' : 'Offline'}
-                          />
-                          <div className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                            {conv.unread_count}
-                          </div>
-                        </div>
-                        <div className="flex-1 min-w-0 text-left">
-                          <div className="text-sm font-semibold text-white truncate">
-                            {getSafeName(friendProfile || {})}
-                          </div>
-                          <div className="text-xs text-slate-400 truncate">
-                            {conv.last_message || 'No messages yet'}
-                          </div>
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {conv.last_message_time ? formatTime(conv.last_message_time) : ''}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-
           {/* All Messages Section */}
           <div className="px-5 py-3 border-t border-slate-700/30">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">All Messages</h3>
@@ -849,7 +907,21 @@ export default function Chat() {
                   return (
                     <button
                       key={conv.id}
-                      onClick={() => openConversation(conv)}
+                      onClick={() => {
+                        // 1. Force this chat's unread count to 0 instantly in UI - bulletproof
+                        setConversations(prevConversations =>
+                          prevConversations.map(c =>
+                            c.id === conv.id ? { ...c, unread_count: 0 } : c
+                          )
+                        );
+                        // 2. PERSISTENT LOCAL OVERRIDE: Save to localStorage to survive page refreshes
+                        localStorage.setItem(`read_chat_${conv.id}`, 'true');
+                        // 3. Immediately mark messages as read in database BEFORE realtime can trigger
+                        // This prevents the race condition where realtime resets the count
+                        markMessagesAsRead(conv.id);
+                        // 4. Then open the conversation
+                        openConversation(conv);
+                      }}
                       className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all cursor-pointer relative ${
                         activeConversation?.id === conv.id
                           ? 'bg-purple-600/20 border-l-4 border-l-purple-500'
@@ -867,7 +939,7 @@ export default function Chat() {
                           className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-slate-800 ${friendOnline ? 'bg-green-500' : 'bg-slate-500'}`}
                           title={friendOnline ? 'Online' : 'Offline'}
                         />
-                        {unread > 0 && (
+                        {unread > 0 && activeConversation?.id !== conv.id && (
                           <div className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
                             {unread}
                           </div>

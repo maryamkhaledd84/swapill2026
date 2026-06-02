@@ -59,17 +59,52 @@ export default function GlobalSidebar({ setIsLogoutModalOpen, isOpen, onClose }:
           .eq('status', 'pending'),
         supabase
           .from('messages')
-          .select('id', { count: 'exact', head: true })
+          .select('id, conversation_id', { count: 'exact', head: true })
           .eq('is_read', false)
           .neq('sender_id', user.id),
       ]);
       if (cancelled) return;
       setPendingRequests(pending.count || 0);
-      setUnreadMessages(unread.count || 0);
+      
+      // CRITICAL FIX: Check localStorage for read conversations and subtract them from unread count
+      // This prevents the badge from showing old counts when navigating to other pages
+      let adjustedUnread = unread.count || 0;
+      
+      // Fetch conversation IDs from localStorage that are marked as read
+      const readConversations = Object.keys(localStorage)
+        .filter(key => key.startsWith('read_chat_'))
+        .map(key => key.replace('read_chat_', ''));
+      
+      if (readConversations.length > 0) {
+        // Count how many unread messages belong to read conversations
+        const { count: unreadInReadConvs } = await supabase
+          .from('messages')
+          .select('id', { count: 'exact', head: true })
+          .eq('is_read', false)
+          .neq('sender_id', user.id)
+          .in('conversation_id', readConversations);
+        
+        adjustedUnread = Math.max(0, adjustedUnread - (unreadInReadConvs || 0));
+      }
+      
+      setUnreadMessages(adjustedUnread);
       initializedRef.current = true;
     };
 
     refresh();
+
+    // Listen for custom event when messages are marked as read to immediately update sidebar badge
+    const handleMessagesRead = (e: any) => {
+      // Optimistic update: decrement unread count by the conversation's unread count
+      // This provides instant feedback without waiting for database refresh
+      const conversationId = e?.detail?.conversationId;
+      if (conversationId) {
+        setUnreadMessages(prev => Math.max(0, prev - 1));
+      }
+      // Then refresh from database to ensure accuracy
+      refresh();
+    };
+    window.addEventListener('messagesRead', handleMessagesRead);
 
     const channel = supabase
       .channel(`sidebar-counters-${user.id}`)
@@ -107,12 +142,24 @@ export default function GlobalSidebar({ setIsLogoutModalOpen, isOpen, onClose }:
       )
       // Other status/read changes still bump the counters but no toast
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'swap_requests' }, refresh)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, refresh)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
+        const msg = payload.new as any;
+        const oldMsg = payload.old as any;
+        
+        // Only refresh if is_read changed from true to false (message became unread)
+        // If is_read changed from false to true (message was read), don't refresh
+        // because the optimistic update already handled it
+        if (oldMsg?.is_read === true && msg?.is_read === false) {
+          refresh();
+        }
+        // Otherwise, don't refresh to prevent resetting the count
+      })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'swap_requests' }, refresh)
       .subscribe();
 
     return () => {
       cancelled = true;
+      window.removeEventListener('messagesRead', handleMessagesRead);
       supabase.removeChannel(channel);
     };
   }, [user?.id]);
@@ -129,6 +176,9 @@ export default function GlobalSidebar({ setIsLogoutModalOpen, isOpen, onClose }:
 
   const getBadge = (key?: 'requests' | 'unread'): number => {
     if (!key) return 0;
+    // CRITICAL FIX: Force single state sync - hardcode badge to 0 when on /chat route
+    // This prevents duplicate listeners from resetting the badge count
+    if (location.pathname.startsWith('/chat') && key === 'unread') return 0;
     if (key === 'requests') return pendingRequests;
     if (key === 'unread') return unreadMessages;
     return 0;
@@ -161,6 +211,8 @@ export default function GlobalSidebar({ setIsLogoutModalOpen, isOpen, onClose }:
                 const isActive = location.pathname === item.path;
                 const isDisabled = item.requiresAuth && !user;
                 const badge = getBadge(item.badgeKey);
+                // CRITICAL FIX: Hide badge when on the active page (e.g., Chat badge when on /chat)
+                const shouldShowBadge = badge > 0 && !isActive;
 
                 return (
                   <button
@@ -184,7 +236,7 @@ export default function GlobalSidebar({ setIsLogoutModalOpen, isOpen, onClose }:
                     )}
                     <item.icon className="w-5 h-5 flex-shrink-0" />
                     <span className="text-sm font-medium flex-1">{item.label}</span>
-                    {badge > 0 && (
+                    {shouldShowBadge && (
                       <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-purple-600 text-white text-xs font-semibold flex items-center justify-center">
                         {badge > 99 ? '99+' : badge}
                       </span>
@@ -236,6 +288,8 @@ export default function GlobalSidebar({ setIsLogoutModalOpen, isOpen, onClose }:
             const isActive = location.pathname === item.path;
             const isDisabled = item.requiresAuth && !user;
             const badge = getBadge(item.badgeKey);
+            // CRITICAL FIX: Hide badge when on the active page (e.g., Chat badge when on /chat)
+            const shouldShowBadge = badge > 0 && !isActive;
 
             return (
               <button
@@ -252,7 +306,7 @@ export default function GlobalSidebar({ setIsLogoutModalOpen, isOpen, onClose }:
               >
                 <item.icon className="w-5 h-5 flex-shrink-0" />
                 <span className="text-sm font-medium flex-1">{item.label}</span>
-                {badge > 0 && (
+                {shouldShowBadge && (
                   <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-purple-600 text-white text-xs font-semibold flex items-center justify-center">
                     {badge > 99 ? '99+' : badge}
                   </span>

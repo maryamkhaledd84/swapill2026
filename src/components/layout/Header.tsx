@@ -1,29 +1,115 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { LogOut, Menu, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUserProfile } from '../../contexts/UserProfileContext';
 import SafeAvatar from '../shared/SafeAvatar';
 import NotificationBell from './NotificationBell';
+import { supabase } from '../../config/supabase';
 
-// Header avatar pill uses the shared SafeAvatar (auto fallback to initials)
+// Header avatar pill with professional loading state and CSS fallback
 function UserAvatar({ avatarUrl, name }: { avatarUrl?: string | null; name: string }) {
-  return <SafeAvatar name={name} src={avatarUrl} size={36} />;
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const initials = name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'MK';
+
+  return (
+    <div className="relative w-9 h-9 rounded-full bg-gradient-to-br from-purple-600 to-violet-600 flex items-center justify-center text-white font-semibold shadow-lg">
+      <span className="text-sm">{initials}</span>
+      {avatarUrl && (
+        <img
+          src={avatarUrl}
+          alt="Profile"
+          onLoad={() => setImageLoaded(true)}
+          onError={() => setImageLoaded(false)}
+          className={`absolute inset-0 w-full h-full rounded-full object-cover transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+        />
+      )}
+    </div>
+  );
 }
 
 export default function Header() {
   const { user, loading } = useAuth();
   const { currentUser: userProfile } = useUserProfile();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [stableAvatarUrl, setStableAvatarUrl] = useState<string | null>(() => {
+    return localStorage.getItem('user_avatar_cache');
+  });
+  const [stableDisplayName, setStableDisplayName] = useState<string>(() => {
+    return localStorage.getItem('user_name_cache') || 'User';
+  });
+
+  // CRITICAL FIX: Lock avatar_url into highly stable state using Supabase auth listeners
+  // This prevents avatar from disappearing when auth session is unstable
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUser = session?.user;
+
+      if (currentUser?.id) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('avatar_url, full_name')
+          .eq('id', currentUser.id)
+          .single();
+
+        if (data) {
+          if (data.avatar_url) {
+            setStableAvatarUrl(data.avatar_url);
+            localStorage.setItem('user_avatar_cache', data.avatar_url);
+          }
+          if (data.full_name) {
+            setStableDisplayName(data.full_name);
+            localStorage.setItem('user_name_cache', data.full_name);
+          }
+        } else {
+          // Fallback to user metadata if profile fetch fails
+          const avatar = currentUser.user_metadata?.avatar_url || null;
+          const name = currentUser.email?.split('@')[0] || 'User';
+          setStableAvatarUrl(avatar);
+          setStableDisplayName(name);
+        }
+      } else {
+        setStableAvatarUrl(null);
+        setStableDisplayName('User');
+      }
+    };
+
+    fetchUserProfile();
+
+    // Set up a listener so if the session changes, it updates smoothly
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        fetchUserProfile();
+      } else {
+        setStableAvatarUrl(null);
+        setStableDisplayName('User');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleLogout = () => {
+    // Clear cached avatar and name on logout
+    localStorage.removeItem('user_avatar_cache');
+    localStorage.removeItem('user_name_cache');
+    setStableAvatarUrl(null);
+    setStableDisplayName('User');
+    
     // This will be handled by the parent component
     const event = new CustomEvent('openLogoutModal');
     window.dispatchEvent(event);
   };
 
-  const displayName = userProfile?.name || user?.email?.split('@')[0] || 'User';
-  const avatarUrl = userProfile?.avatar_url;
+  // Use stable state to prevent avatar from disappearing
+  const displayName = stableDisplayName || userProfile?.name || user?.email?.split('@')[0] || 'User';
+  const avatarUrl = stableAvatarUrl || userProfile?.avatar_url;
 
   return (
     <>

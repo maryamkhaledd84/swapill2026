@@ -128,15 +128,26 @@ export default function RequestsPage() {
         new Set(rawRequests.map(r => (r as any)[counterpartyCol] as string))
       );
 
+      // Defensive check: only query if we have valid IDs
+      if (!counterpartyIds || counterpartyIds.length === 0) {
+        return [];
+      }
+
+      // Validate and filter IDs to ensure they are strings
+      const validUserIds = counterpartyIds.filter(id => id && typeof id === 'string');
+      if (validUserIds.length === 0) {
+        return [];
+      }
+
       const [profilesRes, skillsRes] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, full_name, avatar_url')
-          .in('id', counterpartyIds),
+          .in('id', validUserIds),
         supabase
           .from('skills')
           .select('id, title, category, user_id')
-          .in('user_id', counterpartyIds),
+          .in('user_id', validUserIds),
       ]);
 
       const profileById = new Map<string, CounterpartyProfile>();

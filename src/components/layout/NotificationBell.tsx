@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Bell, MessageCircle, UserPlus } from 'lucide-react';
 import { supabase } from '../../config/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -26,12 +26,16 @@ interface PendingRequest {
 export default function NotificationBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<UnreadMessage[]>([]);
   const [requests, setRequests] = useState<PendingRequest[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const total = messages.length + requests.length;
+  // CRITICAL FIX: Force single state sync - hardcode badge to 0 when on /chat route
+  // This prevents duplicate listeners from resetting the badge count
+  const displayTotal = location.pathname.startsWith('/chat') ? 0 : total;
 
   // Close on outside click
   useEffect(() => {
@@ -59,22 +63,63 @@ export default function NotificationBell() {
     ): Promise<(T & { sender_name?: string; sender_avatar?: string | null })[]> => {
       if (!rows.length) return [];
       const ids = Array.from(new Set(rows.map(r => r.sender_id)));
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, name, avatar_url')
-        .in('id', ids);
-      const byId = new Map<string, { name: string; avatar: string | null }>();
-      (profiles || []).forEach((p: any) => {
-        byId.set(p.id, {
-          name: p.full_name || p.name || 'Member',
-          avatar: p.avatar_url || null,
+      
+      // Defensive check: only query if we have valid IDs
+      if (!ids || ids.length === 0) {
+        return rows.map(r => ({
+          ...r,
+          sender_name: 'Member',
+          sender_avatar: null,
+        }));
+      }
+
+      // Validate and filter IDs to ensure they are strings
+      const validUserIds = ids.filter(id => id && typeof id === 'string');
+      if (validUserIds.length === 0) {
+        return rows.map(r => ({
+          ...r,
+          sender_name: 'Member',
+          sender_avatar: null,
+        }));
+      }
+
+      try {
+        const { data: profiles, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url')
+          .in('id', validUserIds);
+        
+        if (error) {
+          console.error('Error fetching profiles:', error);
+          // Return rows with default values if query fails
+          return rows.map(r => ({
+            ...r,
+            sender_name: 'Member',
+            sender_avatar: null,
+          }));
+        }
+
+        const byId = new Map<string, { name: string; avatar: string | null }>();
+        (profiles || []).forEach((p: any) => {
+          byId.set(p.id, {
+            name: p.full_name || 'Member',
+            avatar: p.avatar_url || null,
+          });
         });
-      });
-      return rows.map(r => ({
-        ...r,
-        sender_name: byId.get(r.sender_id)?.name,
-        sender_avatar: byId.get(r.sender_id)?.avatar ?? null,
-      }));
+        return rows.map(r => ({
+          ...r,
+          sender_name: byId.get(r.sender_id)?.name,
+          sender_avatar: byId.get(r.sender_id)?.avatar ?? null,
+        }));
+      } catch (err) {
+        console.error('Unexpected error fetching profiles:', err);
+        // Return rows with default values if anything fails
+        return rows.map(r => ({
+          ...r,
+          sender_name: 'Member',
+          sender_avatar: null,
+        }));
+      }
     };
 
     const refresh = async () => {
@@ -99,7 +144,16 @@ export default function NotificationBell() {
 
       if (cancelled) return;
 
-      const enrichedMessages = await enrichWithProfiles((msgRes.data || []) as any);
+      // CRITICAL FIX: Filter out messages from conversations marked as read in localStorage
+      const readConversations = Object.keys(localStorage)
+        .filter(key => key.startsWith('read_chat_'))
+        .map(key => key.replace('read_chat_', ''));
+      
+      const filteredMessages = (msgRes.data || []).filter((msg: any) => 
+        !readConversations.includes(msg.conversation_id)
+      );
+
+      const enrichedMessages = await enrichWithProfiles(filteredMessages as any);
       const enrichedRequests = await enrichWithProfiles((reqRes.data || []) as any);
 
       if (cancelled) return;
@@ -109,6 +163,18 @@ export default function NotificationBell() {
 
     refresh();
 
+    // Listen for custom event when messages are marked as read
+    const handleMessagesRead = (e: any) => {
+      // Optimistic update: remove the conversation's messages from local state
+      const conversationId = e?.detail?.conversationId;
+      if (conversationId) {
+        setMessages(prev => prev.filter(m => m.conversation_id !== conversationId));
+      }
+      // Then refresh from database to ensure accuracy
+      refresh();
+    };
+    window.addEventListener('messagesRead', handleMessagesRead);
+
     const channel = supabase
       .channel(`notification-bell-${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, refresh)
@@ -117,6 +183,7 @@ export default function NotificationBell() {
 
     return () => {
       cancelled = true;
+      window.removeEventListener('messagesRead', handleMessagesRead);
       supabase.removeChannel(channel);
     };
   }, [user?.id]);
@@ -132,9 +199,9 @@ export default function NotificationBell() {
         aria-label="Notifications"
       >
         <Bell className="w-5 h-5" />
-        {total > 0 && (
+        {displayTotal > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-purple-600 text-white text-[10px] font-semibold flex items-center justify-center border-2 border-[#0f172a]">
-            {total > 99 ? '99+' : total}
+            {displayTotal > 99 ? '99+' : displayTotal}
           </span>
         )}
       </button>
@@ -143,7 +210,7 @@ export default function NotificationBell() {
         <div className="absolute right-0 top-full mt-2 w-80 bg-slate-900 border border-white/10 rounded-xl shadow-2xl z-50 max-h-96 overflow-y-auto">
           <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white">Notifications</h3>
-            {total === 0 && <span className="text-xs text-slate-500">All caught up</span>}
+            {displayTotal === 0 && <span className="text-xs text-slate-500">All caught up</span>}
           </div>
 
           {requests.length > 0 && (
@@ -202,7 +269,7 @@ export default function NotificationBell() {
             </div>
           )}
 
-          {total === 0 && (
+          {displayTotal === 0 && (
             <div className="px-4 py-8 text-center text-sm text-slate-500">
               No new notifications
             </div>

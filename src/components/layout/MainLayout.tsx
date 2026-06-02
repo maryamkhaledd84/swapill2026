@@ -40,7 +40,7 @@ export default function MainLayout({ children, conversationsCount }: MainLayoutP
     };
   }, []);
 
-  const isChatPage = location.pathname === '/chat';
+  const isChatPage = location.pathname.startsWith('/chat');
   
   // Show loading state if auth or profile is still loading
   if (authLoading || profileLoading) {
