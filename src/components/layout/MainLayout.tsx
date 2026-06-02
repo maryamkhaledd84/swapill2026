@@ -94,16 +94,16 @@ export default function MainLayout({ children, conversationsCount }: MainLayoutP
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden relative z-0">
         {/* Desktop Header - Only shows on large screens */}
-        <header className="hidden lg:block relative z-10">
+        <header className="hidden lg:block relative z-10 flex-shrink-0">
           <Header />
         </header>
-        
+
         {/* Page Content. Chat manages its own scroll regions internally so we
             disable the page-level scroll there and pin the chat header. */}
-        <main className={`flex-1 w-full relative z-0 min-h-0 ${
+        <main className={`flex-1 w-full relative z-0 min-h-0 overflow-hidden ${
           isChatPage
-            ? 'p-0 overflow-hidden'
-            : 'p-4 overflow-y-auto'
+            ? 'h-[calc(100vh-64px)]'
+            : 'p-4 overflow-y-auto h-full'
         }`}>
           {children}
         </main>

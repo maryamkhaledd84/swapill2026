@@ -806,12 +806,11 @@ export default function Chat() {
   const formatTime = (ts: string) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-transparent">
-      <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
+    <div className="flex w-full h-[calc(100vh-64px)] overflow-hidden bg-transparent">
         {/* Sidebar - Hidden on mobile when chat is open */}
-        <aside className={`${showChatArea ? 'hidden' : 'block'} md:block w-full lg:w-80 h-full lg:h-full bg-slate-800/50 backdrop-blur-md border-r border-purple-500/10 flex flex-col pt-0`}>
+        <aside className={`${showChatArea ? 'hidden' : 'block'} md:block w-full lg:w-80 h-full bg-slate-800/50 backdrop-blur-md border-r border-purple-500/10 flex flex-col pt-0 overflow-hidden`}>
         {/* Sidebar Header */}
-        <div className="p-5 border-b border-slate-700/50">
+        <div className="p-5 border-b border-slate-700/50 flex-shrink-0">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-lg font-semibold text-white">Messages ({conversations.length})</h2>
             <button
@@ -905,33 +904,36 @@ export default function Chat() {
                   const otherId = conv.participant_one === currentUser?.id ? conv.participant_two : conv.participant_one;
                   const friendOnline = isOnline(onlineIds, otherId);
                   const unread = conv.unread_count || 0;
+
+                  const handleConversationClick = () => {
+                    // 1. Force UI view toggle for mobile instantly - SYNCHRONOUS
+                    setShowChatArea(true);
+                    // 2. Force this chat's unread count to 0 instantly in UI
+                    setConversations(prevConversations =>
+                      prevConversations.map(c =>
+                        c.id === conv.id ? { ...c, unread_count: 0 } : c
+                      )
+                    );
+                    // 3. PERSISTENT LOCAL OVERRIDE: Save to localStorage to survive page refreshes
+                    localStorage.setItem(`read_chat_${conv.id}`, 'true');
+                    // 4. Then open the conversation (async operations can happen after)
+                    openConversation(conv);
+                    // 5. Mark as read in database (async, happens after UI is updated)
+                    markMessagesAsRead(conv.id);
+                  };
+
                   return (
                     <button
                       key={conv.id}
-                      onClick={() => {
-                        // 1. Force this chat's unread count to 0 instantly in UI - bulletproof
-                        setConversations(prevConversations =>
-                          prevConversations.map(c =>
-                            c.id === conv.id ? { ...c, unread_count: 0 } : c
-                          )
-                        );
-                        // 2. PERSISTENT LOCAL OVERRIDE: Save to localStorage to survive page refreshes
-                        localStorage.setItem(`read_chat_${conv.id}`, 'true');
-                        // 3. Immediately mark messages as read in database BEFORE realtime can trigger
-                        // This prevents the race condition where realtime resets the count
-                        markMessagesAsRead(conv.id);
-                        // 4. Then open the conversation
-                        openConversation(conv);
-                        // 5. Show chat area on mobile
-                        setShowChatArea(true);
-                      }}
+                      onClick={handleConversationClick}
+                      onTouchStart={handleConversationClick}
                       className={`w-full flex items-center gap-3 p-2.5 rounded-lg transition-all cursor-pointer relative ${
                         activeConversation?.id === conv.id
                           ? 'bg-purple-600/20 border-l-4 border-l-purple-500'
                           : 'hover:bg-slate-700/30'
                       }`}
                     >
-                      <div className="relative">
+                      <div className="relative pointer-events-none">
                         <ModernAvatar
                           name={getSafeName(friendProfile || {})}
                           size="small"
@@ -943,12 +945,12 @@ export default function Chat() {
                           title={friendOnline ? 'Online' : 'Offline'}
                         />
                         {unread > 0 && activeConversation?.id !== conv.id && (
-                          <div className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                          <div className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold pointer-events-none">
                             {unread}
                           </div>
                         )}
                       </div>
-                      <div className="flex-1 min-w-0 text-left">
+                      <div className="flex-1 min-w-0 text-left pointer-events-none">
                         <div className="text-sm font-semibold text-white truncate">
                           {getSafeName(friendProfile || {})}
                         </div>
@@ -956,7 +958,7 @@ export default function Chat() {
                           {conv.last_message || 'No messages yet'}
                         </div>
                       </div>
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-slate-500 pointer-events-none">
                         {conv.last_message_time ? formatTime(conv.last_message_time) : ''}
                       </div>
                     </button>
@@ -969,11 +971,11 @@ export default function Chat() {
       </aside>
 
       {/* Chat Window - Visible on mobile only when chat is open */}
-      <main className={`${showChatArea ? 'block' : 'hidden'} md:block flex-1 h-full min-h-0 flex flex-col bg-slate-900/30 backdrop-blur-sm w-full overflow-hidden`}>
+      <main className={`${showChatArea ? 'flex' : 'hidden'} md:flex flex-col flex-1 h-full overflow-hidden`}>
         {selectedUser ? (
-          <>
+          <div className="flex flex-col h-full overflow-hidden">
             {/* Chat Header - pinned at top while messages scroll under it */}
-            <header className="flex-shrink-0 h-14 border-b border-slate-700/30 bg-slate-800/60 backdrop-blur-md flex items-center px-4 z-10">
+            <div className="flex-shrink-0 border-b border-slate-700/30 bg-slate-800/60 backdrop-blur-md flex items-center px-4 z-10">
               {/* Mobile Back Button */}
               <button
                 onClick={() => setShowChatArea(false)}
@@ -1030,7 +1032,7 @@ export default function Chat() {
                   <Video className="w-3.5 h-3.5" />
                 </button>
               </div>
-            </header>
+            </div>
 
             {/* Messages Area - the only scrollable region in the chat panel */}
             <motion.div
@@ -1039,10 +1041,10 @@ export default function Chat() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.18, ease: 'easeOut' }}
-              className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4"
+              className="flex-1 overflow-y-auto p-4 min-h-0 space-y-4"
             >
               {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="flex flex-col items-center justify-center text-center">
                   <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500/20 to-violet-500/20 flex items-center justify-center mb-4">
                     <MessageCircle className="w-8 h-8 text-purple-400" />
                   </div>
@@ -1111,7 +1113,7 @@ export default function Chat() {
             </motion.div>
 
             {/* Message Input - pinned at the bottom of the chat panel */}
-            <footer className="flex-shrink-0 border-t border-slate-700/30 bg-slate-800/30 backdrop-blur-md p-4">
+            <footer className="flex-shrink-0 border-t border-slate-700/30 bg-slate-800/30 backdrop-blur-md p-4 sticky bottom-0">
               <div className="flex items-center gap-3 bg-slate-900/50 border border-slate-600/50 rounded-full px-4 py-3 backdrop-blur-sm">
                 <input
                   ref={attachmentInputRef}
@@ -1171,10 +1173,10 @@ export default function Chat() {
                 </button>
               </div>
             </footer>
-          </>
+          </div>
         ) : (
           /* Empty State */
-          <div className="flex-1 flex items-center justify-center px-6">
+          <div className="flex-1 flex items-center justify-center px-6 overflow-hidden">
             <div className="text-center max-w-md">
               <div className="mx-auto w-24 h-24 rounded-full bg-gradient-to-br from-purple-500/20 to-violet-500/20 flex items-center justify-center mb-8 border border-purple-500/30">
                 <MessageCircle className="w-12 h-12 text-purple-400" />
@@ -1193,11 +1195,10 @@ export default function Chat() {
       </main>
 
       {/* Logout Modal */}
-      <LogoutModal 
+      <LogoutModal
         isOpen={logoutModalOpen}
         onClose={() => setLogoutModalOpen(false)}
       />
-      </div>
     </div>
   );
 }
