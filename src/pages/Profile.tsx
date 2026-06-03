@@ -3037,7 +3037,7 @@ export default function Profile() {
 
                 <button
 
-                  onClick={handleAddSkill}
+                  onClick={handleSaveSkill}
 
                   disabled={skillLoading}
 
